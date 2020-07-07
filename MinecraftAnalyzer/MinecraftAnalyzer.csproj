@@ -8,9 +8,14 @@
 
   <ItemGroup>
     <PackageReference Include="CsvHelper" Version="15.0.5" />
-    <PackageReference Include="fNbt" Version="0.6.4" />
     <PackageReference Include="MiNET.LevelDB" Version="1.0.20" />
     <PackageReference Include="NUnit" Version="3.12.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="fNbt">
+      <HintPath>..\Updated fNBT\fNbt-master\bin\Debug\fNbt.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

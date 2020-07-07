@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:MinecraftAnalyzer"
         mc:Ignorable="d"
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
-        Title="Minecraft Bedrock World Analyzer" Height="450" Width="800">
+        Title="Minecraft World Analyzer" Height="450" Width="800">
 
     <Window.CommandBindings>
         <CommandBinding Command="local:MainWindow.AnalyzeCommand" CanExecute="CanExecuteAnalyze" Executed="ExecuteAnalyze"/>
@@ -36,29 +36,78 @@
     <Grid>
         <DockPanel Margin="5">
             <TextBlock HorizontalAlignment="Center" TextAlignment="Center" DockPanel.Dock="Top">
-                <Run FontSize="24" FontWeight="Bold">Minecraft Bedrock World Analyzer</Run><LineBreak/>
-                <Run>Created by Keith Stein for Minecraft Bedrock version 1.16.0</Run>
+                <Run FontSize="24" FontWeight="Bold">Minecraft World Analyzer</Run><LineBreak/>
+                <Run>Created by Keith Stein for Minecraft version 1.16.1</Run><LineBreak/>
+                <Run>Supports both Bedrock and Java edition</Run>
             </TextBlock>
 
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" TextElement.FontSize="16">
-                <TextBlock Style="{StaticResource Step}">1. Open Minecraft Bedrock and export the world.</TextBlock>
+            <TabControl VerticalAlignment="Center" HorizontalAlignment="Center" TextElement.FontSize="16" SelectedIndex="{Binding MinecraftEdition, Converter={x:Static local:EnumConverter.Instance}}">
+                <TabControl.Template>
+                    <ControlTemplate TargetType="{x:Type TabControl}">
+                        <Grid x:Name="templateRoot" ClipToBounds="true" SnapsToDevicePixels="true" KeyboardNavigation.TabNavigation="Local">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition x:Name="ColumnDefinition0"/>
+                                <ColumnDefinition x:Name="ColumnDefinition1" Width="0"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition x:Name="RowDefinition0" Height="Auto"/>
+                                <RowDefinition x:Name="RowDefinition1" Height="*"/>
+                            </Grid.RowDefinitions>
+                            <UniformGrid Rows="1" x:Name="headerPanel" Background="Transparent" Grid.Column="0" IsItemsHost="true" Margin="2,2,2,0" Grid.Row="0" KeyboardNavigation.TabIndex="1" Panel.ZIndex="1"/>
+                            <Border x:Name="contentPanel" Background="{TemplateBinding Background}" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{TemplateBinding BorderBrush}" Grid.Column="0" KeyboardNavigation.DirectionalNavigation="Contained" Grid.Row="1" KeyboardNavigation.TabNavigation="Local" KeyboardNavigation.TabIndex="2">
+                                <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="{TemplateBinding Padding}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="false">
+                                <Setter Property="TextElement.Foreground" TargetName="templateRoot" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </TabControl.Template>
+                
+                <TabItem Header="Bedrock">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Step}">1. Open Minecraft Bedrock and export the world.</TextBlock>
 
-                <TextBlock Style="{StaticResource Step}">2. Select the exported world.</TextBlock>
-                <DockPanel>
-                    <Button DockPanel.Dock="Right" Click="B_BrowseForImput_Click">Browse...</Button>
-                    <TextBox IsReadOnly="True" Text="{Binding InputFile}"/>
-                </DockPanel>
+                        <TextBlock Style="{StaticResource Step}">2. Select the exported world.</TextBlock>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Click="B_BrowseForInput_Click">Browse...</Button>
+                            <TextBox IsReadOnly="True" Text="{Binding InputFile}"/>
+                        </DockPanel>
 
-                <TextBlock Style="{StaticResource Step}">3. Chose a location for the output file.</TextBlock>
-                <DockPanel>
-                    <Button DockPanel.Dock="Right" Click="B_BrowseForOutput_Click">Browse...</Button>
-                    <TextBox IsReadOnly="True" Text="{Binding OutputFile}"/>
-                </DockPanel>
+                        <TextBlock Style="{StaticResource Step}">3. Chose a location for the output file.</TextBlock>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Click="B_BrowseForOutput_Click">Browse...</Button>
+                            <TextBox IsReadOnly="True" Text="{Binding OutputFile}"/>
+                        </DockPanel>
 
-                <TextBlock Style="{StaticResource Step}">4. Analyze the Minecraft world.</TextBlock>
-                <Button Command="local:MainWindow.AnalyzeCommand">Start Analysis</Button>
-            </StackPanel>
+                        <TextBlock Style="{StaticResource Step}">4. Analyze the Minecraft world.</TextBlock>
+                        <Button Command="local:MainWindow.AnalyzeCommand">Start Analysis</Button>
+                    </StackPanel>
+                </TabItem>
+                <TabItem Header="Java">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Step}">1. Select the level.dat file for your Minecraft world.</TextBlock>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Click="B_BrowseForInput_Click">Browse...</Button>
+                            <TextBox IsReadOnly="True" Text="{Binding InputFile}"/>
+                        </DockPanel>
+
+                        <TextBlock Style="{StaticResource Step}">2. Chose a location for the output file.</TextBlock>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Click="B_BrowseForOutput_Click">Browse...</Button>
+                            <TextBox IsReadOnly="True" Text="{Binding OutputFile}"/>
+                        </DockPanel>
+
+                        <TextBlock Style="{StaticResource Step}">3. Analyze the Minecraft world.</TextBlock>
+                        <Button Command="local:MainWindow.AnalyzeCommand">Start Analysis</Button>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
         </DockPanel>
+
+        <CheckBox HorizontalAlignment="Right" VerticalAlignment="Top" Margin="25" ToolTip="Increases anaysis speed, but may overwhelm your computer if the sample size is too large or the computer isn't very powerful.">Multi-Thread Mode</CheckBox>
 
         <Border Background="#CC808080">
             <Border.Style>
