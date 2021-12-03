@@ -279,13 +279,26 @@ Evaluated {blockCount} blocks.");
         }
 
         private string[] oreBlocks = { "minecraft:gold_ore",
+                                       "minecraft:deepslate_gold_ore",
+                                       "minecraft:raw_gold_block",
                                        "minecraft:iron_ore",
+                                       "minecraft:deepslate_iron_ore",
+                                       "minecraft:raw_iron_block",
                                        "minecraft:coal_ore",
+                                       "minecraft:deepslate_coal_ore",
                                        "minecraft:lapis_ore",
+                                       "minecraft:deepslate_lapis_ore",
                                        "minecraft:diamond_ore",
+                                       "minecraft:deepslate_diamond_ore",
                                        "minecraft:redstone_ore",
+                                       "minecraft:deepslate_redstone_ore",
                                        "minecraft:lit_redstone_ore",
+                                       "minecraft:lit_deepslate_redstone_ore",
+                                       "minecraft:copper_ore",
+                                       "minecraft:deepslate_copper_ore",
+                                       "minecraft:raw_copper_block",
                                        "minecraft:emerald_ore",
+                                       "minecraft:deepslate_emerald_ore",
                                        "minecraft:lava",
                                        "minecraft:flowing_lava"};
 

@@ -92,6 +92,23 @@ namespace MinecraftAnalyzer
 
         public static void ParseChunk(NbtFile chunk, Action<BlockInfo> blockAction)
         {
+            //In 1.18 they removed the "Level" tag, so it's an easy way to check which version we're workign with
+            //(Could have used DataVersion, but didn't want to bother)
+            if (chunk.RootTag.Names.Contains("Level"))
+            {
+                ParseChunk16(chunk, blockAction);
+            }
+            else
+            {
+                ParseChunk18(chunk, blockAction);
+            }
+        }
+
+        /// <summary>
+        /// Parses a chunk saved in the format from Minecraft 1.16, 1.17 and earlier (untested) versions.
+        /// </summary>
+        public static void ParseChunk16(NbtFile chunk, Action<BlockInfo> blockAction)
+        {
             //We can get the chunks absolute coordinates (not relative to the region) by reading these NBT tags.
             //Note: these are chunk coordinates, not block coordinates. Chunk 1,1 starts with block 16,16.
             var chunkCoordinates = new ChunkCoordinate(chunk.RootTag["Level"]["xPos"].IntValue, chunk.RootTag["Level"]["zPos"].IntValue);
@@ -150,7 +167,103 @@ namespace MinecraftAnalyzer
                             blockBuffer.Set(bufferIndex, word.Get(wordIndex));
                             wordIndex++;
                         }
-                        
+
+                        //Convert the buffer into a 16-bit integer
+                        byte[] bytes = new byte[2];
+                        blockBuffer.CopyTo(bytes, 0);
+                        int paletteIndex = BitConverter.ToUInt16(bytes);
+
+                        //Blocks are stored by Y then Z then X, so use the overall index to get the 3D coordinates using math.
+                        //These initial coordinates will be relative to the subchunk, not the absolute coordinates of that block in the world.
+                        int x = blockNumber % 16;
+                        int z = (blockNumber / 16) % 16;
+                        int y = (int)Math.Truncate(blockNumber / (double)(16 * 16));
+
+                        //The initial coordinates will be relative to the chunk.
+                        //We need to add them to the chunks coordinates to get the absolute position of the block in the world.
+                        x += subChunkCoordinates.X;
+                        z += subChunkCoordinates.Z;
+                        //The Y coordinate is actually which slice of the chunk (0-15) is being parsed, not the real Y coordniate of where the slice starts.
+                        //Since each slice is 16 blocks tall, we need to multiple by 16 before adding to get the correct Y of the block.
+                        y = (subChunkCoordinates.Y * 16) + y;
+
+                        var block = new BlockInfo(palette[paletteIndex], new Point3D(x, y, z));
+                        blockAction.Invoke(block);
+
+                        blockNumber++;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Parses a chunk saved in the format from Minecraft 1.18 (when the world hight changed)
+        /// </summary>
+        public static void ParseChunk18(NbtFile chunk, Action<BlockInfo> blockAction)
+        {
+            //We can get the chunks absolute coordinates (not relative to the region) by reading these NBT tags.
+            //Note: these are chunk coordinates, not block coordinates. Chunk 1,1 starts with block 16,16.
+            var chunkCoordinates = new ChunkCoordinate(chunk.RootTag["xPos"].IntValue, chunk.RootTag["zPos"].IntValue);
+
+            //Each chunk is sliced into "subchunks" or "sections" of 16x16x16 blocks.
+            //These sections are stacked vertically to make the full chunk (16x384x16).
+            //There are 16 subchunks in a chunk, but empty subchunks might be missing from the save file.
+            var subChunks = (NbtList)chunk.RootTag["sections"];
+
+            foreach (var subChunk in subChunks)
+            {
+                //The first tag in "sections" actually isn't a subchunk.
+                //We only want subchunks, which can be identified by having the tag "BlockStates".
+                if (!(subChunk as NbtCompound).Names.Contains("block_states")) { continue; }
+
+                //Some chunks are empty (ungenerated?). Skip those.
+                if (subChunk["block_states"]["data"] == null) { continue; }
+
+                //First get the coordinates of the subchunk.
+                //"Y" isn't the coordinate in terms of blocks, it's actually the subchunk index (from -4 through 19; bottom to top).
+                //Because it's using an unsigned byte, negative numbers wrap back around, so -4 = 252, -3 = 253, etc. (SubChunkCoordinate constructor handles this by checking yPos.)
+                var subChunkCoordinates = new SubChunkCoordinate(chunkCoordinates, ((NbtByte)subChunk["Y"]).Value, ((NbtInt)chunk.RootTag["yPos"]).Value);
+                int blockNumber = 0;
+
+                //Each subchunk has its own "palette": a list of all the blocks that are actually used in that subchunk.
+                //Each block in the chunk data is recorded as an index used to look up the actual block in the palette.
+                var palette = (NbtList)subChunk["block_states"]["palette"];
+
+                //Each block is stored as an index to the palette, but the length of that index is variable and depends on the the number of blocks in the palette.
+                //More block types in the palette = a larger integer type needed to serve as an index.
+                //The size (number of bits) of the index integer that was used to record the blocks will be the minimum required to store the largest index value, but will not be lower than 4.
+                //To calculate this, we take the number of block types in the palette and subtract 1 to get the largest index value.
+                //Then we use Ceiling(Log2()) to calculate the smallest integer size which can store that index value.
+                //We use that value unless it is less than 4, in which case we use 4.
+                int bitsPerBlock = (int)Math.Max(Math.Ceiling(Math.Log2(palette.Count - 1)), 4);
+
+                //Groups of block indices are packed into 64-bit integers ("words").
+                foreach (var l in ((NbtLongArray)subChunk["block_states"]["data"]).Value)
+                {
+                    var word = new BitArray(BitConverter.GetBytes(l));
+
+                    //Current index for reading bits in the current word
+                    int wordIndex = 0;
+
+                    //Loop until there could be no more full block indexes in the current word
+                    //(i.e. the next block index would take us past the end of the word).
+                    //This leaves off the padding for bitsPerBlock which aren't factors of 32.
+                    while (!(wordIndex + bitsPerBlock > word.Length))
+                    {
+                        //We need to convert each variable-sized block index into a fixed-sized integer so we can use it in code.
+                        //Since there are a max of 4096 block indecies, there can't be more than 4096 palette options.
+                        //This means 4095 is our largest possable index value. The smallest normal integer size that can fit this value is 16-bit.
+                        //So for our buffer size we use 16 bits, which we will convert to a 16-bit, unsigned integer later.
+                        var blockBuffer = new BitArray(16);
+
+                        //Read however many bits constitutes a block index into the buffer.
+                        //The rest of the buffer will stay 0, which is fine since this data is little-endian.
+                        for (int bufferIndex = 0; bufferIndex < bitsPerBlock; bufferIndex++)
+                        {
+                            blockBuffer.Set(bufferIndex, word.Get(wordIndex));
+                            wordIndex++;
+                        }
+
                         //Convert the buffer into a 16-bit integer
                         byte[] bytes = new byte[2];
                         blockBuffer.CopyTo(bytes, 0);
