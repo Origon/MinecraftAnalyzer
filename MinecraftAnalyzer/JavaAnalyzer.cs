@@ -29,58 +29,61 @@ namespace MinecraftAnalyzer
             {
                 using (var f = File.Open(path, FileMode.Open))
                 {
+                    //Sometimes empty region files are generated for some reason. Skip those.
+                    if (f.Length > 0)
+                    { 
+                        //The first 8KiB are a header listing which chunks are present,
+                        //how many "sectors" into the file that particular chunk starts
+                        //and how many "sectors" of data that chunk takes up.
+                        //A "sector" is 4KiB.
 
-                    //The first 8KiB are a header listing which chunks are present,
-                    //how many "sectors" into the file that particular chunk starts
-                    //and how many "sectors" of data that chunk takes up.
-                    //A "sector" is 4KiB.
+                        //Start going reading through the header and getting a list of the offset every present chunk.
+                        var chunksToParse = new List<UInt32>();
 
-                    //Start going reading through the header and getting a list of the offset every present chunk.
-                    var chunksToParse = new List<UInt32>();
-
-                    do
-                    {
-                        //Each chunk header entry starts with a 3 byte, unsigned integer specifying the chunks offset in the region file.
-                        //Since we have no 24-bit integer types, use bit shifting to merge them into a 32-bit integer with the last byte empty.
-                        //Multiply this number of sectors by 4096 bytes to offset in bytes for this chunk.
-                        var b1 = (UInt32)f.ReadByte();
-                        var b2 = (UInt32)f.ReadByte();
-                        var b3 = (UInt32)f.ReadByte();
-                        var offset = (b1 << 16 | b2 << 8 | b3) * 4096;
-
-                        //The length of the chunk data (in sectors), is stored in a single byte.
-                        //Multiply by 4096 to get the length in bytes.
-                        var length = f.ReadByte() * 4096;
-
-                        //If the chunk is generated and saved yet, offset and length will be 0.
-                        if (offset != 0 && length != 0) { chunksToParse.Add(offset); }
-
-                    //Stop once we reach the end of the header at byte 4096;
-                    } while (f.Position != 4096);
-
-                    List<Task> parseTasks = multiThread ? new List<Task>() : null;
-
-                    foreach (var chunkOffset in chunksToParse)
-                    {
-                        //Move ahead to the start of this chunk's data.
-                        //The first four bytes give the exact size of the chunk and the fifth is the compression type.
-                        //This data is all infered by the NBT library from the data itself, so we can just skip it.
-                        f.Seek(chunkOffset + 5, SeekOrigin.Begin);                           
-
-                        var chunkNBT = new NbtFile();
-                        chunkNBT.LoadFromStream(f, NbtCompression.AutoDetect);
-
-                        if (multiThread)
+                        do
                         {
-                            parseTasks.Add(ParseChunkAsync(chunkNBT, blockAction));
-                        }
-                        else
-                        {
-                            ParseChunk(chunkNBT, blockAction);
-                        }
-                    }
+                            //Each chunk header entry starts with a 3 byte, unsigned integer specifying the chunks offset in the region file.
+                            //Since we have no 24-bit integer types, use bit shifting to merge them into a 32-bit integer with the last byte empty.
+                            //Multiply this number of sectors by 4096 bytes to offset in bytes for this chunk.
+                            var b1 = (UInt32)f.ReadByte();
+                            var b2 = (UInt32)f.ReadByte();
+                            var b3 = (UInt32)f.ReadByte();
+                            var offset = (b1 << 16 | b2 << 8 | b3) * 4096;
 
-                    if (multiThread) { Task.WaitAll(parseTasks.ToArray()); }
+                            //The length of the chunk data (in sectors), is stored in a single byte.
+                            //Multiply by 4096 to get the length in bytes.
+                            var length = f.ReadByte() * 4096;
+
+                            //If the chunk is generated and saved yet, offset and length will be 0.
+                            if (offset != 0 && length != 0) { chunksToParse.Add(offset); }
+
+                        //Stop once we reach the end of the header at byte 4096;
+                        } while (f.Position != 4096);
+
+                        List<Task> parseTasks = multiThread ? new List<Task>() : null;
+
+                        foreach (var chunkOffset in chunksToParse)
+                        {
+                            //Move ahead to the start of this chunk's data.
+                            //The first four bytes give the exact size of the chunk and the fifth is the compression type.
+                            //This data is all infered by the NBT library from the data itself, so we can just skip it.
+                            f.Seek(chunkOffset + 5, SeekOrigin.Begin);                           
+
+                            var chunkNBT = new NbtFile();
+                            chunkNBT.LoadFromStream(f, NbtCompression.AutoDetect);
+
+                            if (multiThread)
+                            {
+                                parseTasks.Add(ParseChunkAsync(chunkNBT, blockAction));
+                            }
+                            else
+                            {
+                                ParseChunk(chunkNBT, blockAction);
+                            }
+                        }
+
+                        if (multiThread) { Task.WaitAll(parseTasks.ToArray()); }
+                    }                    
                 }
             }
         }
@@ -276,14 +279,16 @@ namespace MinecraftAnalyzer
                         int y = (int)Math.Truncate(blockNumber / (double)(16 * 16));
 
                         //The initial coordinates will be relative to the chunk.
-                        //We need to add them to the chunks coordinates to get the absolute position of the block in the world.
-                        x += subChunkCoordinates.X;
-                        z += subChunkCoordinates.Z;
+                        //We need to add them to the chunk's coordinates to get the absolute position of the block in the world.
+                        //(Note, to get the chunck coordinates in blocks we have to multiply by 16)
+                        x += (subChunkCoordinates.X * 16);
+                        z += (subChunkCoordinates.Z * 16);
                         //The Y coordinate is actually which slice of the chunk (0-15) is being parsed, not the real Y coordniate of where the slice starts.
                         //Since each slice is 16 blocks tall, we need to multiple by 16 before adding to get the correct Y of the block.
-                        y = (subChunkCoordinates.Y * 16) + y;
+                        y += (subChunkCoordinates.Y * 16);
 
                         var block = new BlockInfo(palette[paletteIndex], new Point3D(x, y, z));
+                        if (y == 318 && block.Name == "minecraft:coal_ore") { Debug.Print("!"); }
                         blockAction.Invoke(block);
 
                         blockNumber++;
