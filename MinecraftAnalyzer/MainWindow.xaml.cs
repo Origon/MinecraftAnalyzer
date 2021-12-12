@@ -298,9 +298,16 @@ Evaluated {blockCount} blocks.");
                                        "minecraft:deepslate_copper_ore",
                                        "minecraft:raw_copper_block",
                                        "minecraft:emerald_ore",
-                                       "minecraft:deepslate_emerald_ore",
-                                       "minecraft:lava",
-                                       "minecraft:flowing_lava"};
+                                       "minecraft:deepslate_emerald_ore" };
+
+        private int caveBlockYLimit = 63;
+
+        private string[] caveBlocks = { "minecraft:air",
+                                        "cave_air",
+                                        "minecraft:lava",
+                                        "minecraft:flowing_lava",
+                                        "minecraft:water",
+                                        "minecraft:flowing_water"};
 
         private ConcurrentQueue<BlockInfo> blockQueue;
 
@@ -310,7 +317,9 @@ Evaluated {blockCount} blocks.");
         {
             Interlocked.Increment(ref blockCount);
 
-            if (oreBlocks.Contains(block.Name))
+            if (oreBlocks.Contains(block.Name) ||
+                (block.Coordinates.Y <= caveBlockYLimit && caveBlocks.Contains(block.Name)) ||
+                block.Name == "minecraft:bedrock" && (block.Coordinates.Y == -64 || block.Coordinates.Y == 0))
             {
                 blockQueue.Enqueue(block);
             }

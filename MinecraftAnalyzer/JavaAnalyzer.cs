@@ -139,10 +139,10 @@ namespace MinecraftAnalyzer
                 //Each block is stored as an index to the palette, but the length of that index is variable and depends on the the number of blocks in the palette.
                 //More block types in the palette = a larger integer type needed to serve as an index.
                 //The size (number of bits) of the index integer that was used to record the blocks will be the minimum required to store the largest index value, but will not be lower than 4.
-                //To calculate this, we take the number of block types in the palette and subtract 1 to get the largest index value.
-                //Then we use Ceiling(Log2()) to calculate the smallest integer size which can store that index value.
+                //To calculate this, we use Log2(palette.Count) to get the number of binary digits it would take to store that many possible values (not to store that integer, but that number of possible integer values, including 0)
+                //Then we use Ceiling() to get the smallest whole number of binary digits required
                 //We use that value unless it is less than 4, in which case we use 4.
-                int bitsPerBlock = (int)Math.Max(Math.Ceiling(Math.Log2(palette.Count - 1)), 4);
+                int bitsPerBlock = (int)Math.Max(Math.Ceiling(Math.Log2(palette.Count)), 4);
 
                 //Groups of block indices are packed into 64-bit integers ("words").
                 foreach (var l in ((NbtLongArray)subChunk["BlockStates"]).Value)
@@ -184,11 +184,12 @@ namespace MinecraftAnalyzer
 
                         //The initial coordinates will be relative to the chunk.
                         //We need to add them to the chunks coordinates to get the absolute position of the block in the world.
-                        x += subChunkCoordinates.X;
-                        z += subChunkCoordinates.Z;
+                        //(Note, to get the chunck coordinates in blocks we have to multiply by 16)
+                        x += (subChunkCoordinates.X * 16);
+                        z += (subChunkCoordinates.Z * 16);
                         //The Y coordinate is actually which slice of the chunk (0-15) is being parsed, not the real Y coordniate of where the slice starts.
                         //Since each slice is 16 blocks tall, we need to multiple by 16 before adding to get the correct Y of the block.
-                        y = (subChunkCoordinates.Y * 16) + y;
+                        y += (subChunkCoordinates.Y * 16);
 
                         var block = new BlockInfo(palette[paletteIndex], new Point3D(x, y, z));
                         blockAction.Invoke(block);
@@ -235,10 +236,10 @@ namespace MinecraftAnalyzer
                 //Each block is stored as an index to the palette, but the length of that index is variable and depends on the the number of blocks in the palette.
                 //More block types in the palette = a larger integer type needed to serve as an index.
                 //The size (number of bits) of the index integer that was used to record the blocks will be the minimum required to store the largest index value, but will not be lower than 4.
-                //To calculate this, we take the number of block types in the palette and subtract 1 to get the largest index value.
-                //Then we use Ceiling(Log2()) to calculate the smallest integer size which can store that index value.
+                //To calculate this, we use Log2(palette.Count) to get the number of binary digits it would take to store that many possible values (not to store that integer, but that number of possible integer values, including 0)
+                //Then we use Ceiling() to get the smallest whole number of binary digits required
                 //We use that value unless it is less than 4, in which case we use 4.
-                int bitsPerBlock = (int)Math.Max(Math.Ceiling(Math.Log2(palette.Count - 1)), 4);
+                int bitsPerBlock = (int)Math.Max(Math.Ceiling(Math.Log2(palette.Count)), 4);
 
                 //Groups of block indices are packed into 64-bit integers ("words").
                 foreach (var l in ((NbtLongArray)subChunk["block_states"]["data"]).Value)
@@ -256,18 +257,20 @@ namespace MinecraftAnalyzer
                         //We need to convert each variable-sized block index into a fixed-sized integer so we can use it in code.
                         //Since there are a max of 4096 block indecies, there can't be more than 4096 palette options.
                         //This means 4095 is our largest possable index value. The smallest normal integer size that can fit this value is 16-bit.
+                        //So our target integer type will be an unsigned 16-bit integer.
+
                         //So for our buffer size we use 16 bits, which we will convert to a 16-bit, unsigned integer later.
-                        var blockBuffer = new BitArray(16);
+                        var blockBuffer = new BitArray(bitsPerBlock);
 
                         //Read however many bits constitutes a block index into the buffer.
-                        //The rest of the buffer will stay 0, which is fine since this data is little-endian.
+                        //Incoming data is little-endian
                         for (int bufferIndex = 0; bufferIndex < bitsPerBlock; bufferIndex++)
                         {
                             blockBuffer.Set(bufferIndex, word.Get(wordIndex));
                             wordIndex++;
                         }
 
-                        //Convert the buffer into a 16-bit integer
+                        //We can now copy the little-endian-ordered bits into a 2-byte (16-bit) array and read that as an unsigned 16-bit integer
                         byte[] bytes = new byte[2];
                         blockBuffer.CopyTo(bytes, 0);
                         int paletteIndex = BitConverter.ToUInt16(bytes);
@@ -288,7 +291,6 @@ namespace MinecraftAnalyzer
                         y += (subChunkCoordinates.Y * 16);
 
                         var block = new BlockInfo(palette[paletteIndex], new Point3D(x, y, z));
-                        if (y == 318 && block.Name == "minecraft:coal_ore") { Debug.Print("!"); }
                         blockAction.Invoke(block);
 
                         blockNumber++;
